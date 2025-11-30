@@ -1,6 +1,5 @@
 import requests
 import time
-import json
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -16,7 +15,6 @@ from telegram.ext import (
 # -----------------------------
 API_URL = "https://egoistyato.pythonanywhere.com"
 ADMIN_PASSWORD = "yato123"
-
 ADMIN_LOGGED_IN = set()
 
 ASK_PASS = 1
@@ -164,7 +162,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN (async)
 # -----------------------------
 async def main():
-    TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # PUT YOUR TOKEN
+    TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"  # PUT BOT TOKEN HERE
 
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -182,7 +180,7 @@ async def main():
     app.add_handler(CommandHandler("delkey", delete_key))
     app.add_handler(CommandHandler("stats", stats))
 
-    print("BOT RUNNING OK!")
+    print("BOT RUNNING...")
     await app.run_polling()
 
 
