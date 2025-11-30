@@ -1,6 +1,15 @@
 import requests
 import time
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
+from datetime import datetime
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters
+)
 
 # -----------------------------
 # CONFIG
@@ -10,39 +19,40 @@ ADMIN_PASSWORD = "yato123"
 
 ADMIN_LOGGED_IN = set()
 
+ASK_PASS = 1
+
+
 # -----------------------------
 # ADMIN LOGIN
 # -----------------------------
-ASK_PASS = 1
-
-def admin_panel(update, context):
-    update.message.reply_text("Enter admin password:")
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Enter admin password:")
     return ASK_PASS
 
-def admin_password(update, context):
+
+async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == ADMIN_PASSWORD:
         ADMIN_LOGGED_IN.add(update.message.from_user.id)
-        update.message.reply_text("✅ Logged in as admin!")
+        await update.message.reply_text("✅ Logged in as admin!")
     else:
-        update.message.reply_text("❌ Wrong password.")
+        await update.message.reply_text("❌ Wrong password.")
 
     return ConversationHandler.END
 
-# -----------------------------
-# CHECK ADMIN
-# -----------------------------
+
 def check_admin(user_id):
     return user_id in ADMIN_LOGGED_IN
+
 
 # -----------------------------
 # ADD KEY
 # -----------------------------
-def add_key(update, context):
+async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
-        return update.message.reply_text("❌ Admin only.")
+        return await update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 3:
-        return update.message.reply_text("Usage: /addkey KEY MAX_DEVICES YYYY-MM-DD")
+        return await update.message.reply_text("Usage: /addkey KEY MAX_DEVICES YYYY-MM-DD")
 
     key = context.args[0]
     max_devices = context.args[1]
@@ -55,17 +65,18 @@ def add_key(update, context):
         "expires": expires
     })
 
-    update.message.reply_text(r.text)
+    await update.message.reply_text(r.text)
+
 
 # -----------------------------
 # DELETE KEY
 # -----------------------------
-def delete_key(update, context):
+async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
-        return update.message.reply_text("❌ Admin only.")
+        return await update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 1:
-        return update.message.reply_text("Usage: /delkey KEY")
+        return await update.message.reply_text("Usage: /delkey KEY")
 
     key = context.args[0]
 
@@ -74,14 +85,15 @@ def delete_key(update, context):
         "key": key
     })
 
-    update.message.reply_text(r.text)
+    await update.message.reply_text(r.text)
+
 
 # -----------------------------
 # CHECK KEY
 # -----------------------------
-def check(update, context):
+async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
-        return update.message.reply_text("Usage: /check KEY")
+        return await update.message.reply_text("Usage: /check KEY")
 
     key = context.args[0]
 
@@ -89,16 +101,17 @@ def check(update, context):
     res = r.json()
 
     if res.get("valid"):
-        update.message.reply_text("✅ Key is VALID!")
+        await update.message.reply_text("✅ Key is VALID!")
     else:
-        update.message.reply_text(f"❌ Invalid key.\nReason: {res.get('error')}")
+        await update.message.reply_text(f"❌ Invalid key.\nReason: {res.get('error')}")
+
 
 # -----------------------------
 # STATS
 # -----------------------------
-def stats(update, context):
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
-        return update.message.reply_text("❌ Admin only.")
+        return await update.message.reply_text("❌ Admin only.")
 
     r = requests.get(API_URL + "/api/bot/get_keys", params={
         "password": ADMIN_PASSWORD
@@ -117,17 +130,18 @@ def stats(update, context):
         else:
             active += 1
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"📊 Key Stats\n"
         f"Active: {active}\n"
         f"Expired: {expired}"
     )
 
+
 # -----------------------------
 # START
 # -----------------------------
-def start(update, context):
-    update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "Commands:\n"
         "/check KEY\n"
         "/admin\n\n"
@@ -137,30 +151,30 @@ def start(update, context):
         "/stats"
     )
 
+
 # -----------------------------
 # MAIN
 # -----------------------------
 def main():
     TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"
 
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    app = ApplicationBuilder().token(TOKEN).build()
 
     admin_handler = ConversationHandler(
         entry_points=[CommandHandler("admin", admin_panel)],
-        states={ASK_PASS: [MessageHandler(Filters.text, admin_password)]},
+        states={ASK_PASS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_password)]},
         fallbacks=[]
     )
 
-    dp.add_handler(admin_handler)
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("check", check))
-    dp.add_handler(CommandHandler("addkey", add_key))
-    dp.add_handler(CommandHandler("delkey", delete_key))
-    dp.add_handler(CommandHandler("stats", stats))
+    app.add_handler(admin_handler)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("check", check))
+    app.add_handler(CommandHandler("addkey", add_key))
+    app.add_handler(CommandHandler("delkey", delete_key))
+    app.add_handler(CommandHandler("stats", stats))
 
-    updater.start_polling()
-    updater.idle()
+    print("🤖 Bot is running...")
+    app.run_polling()
 
 
 if __name__ == "__main__":
