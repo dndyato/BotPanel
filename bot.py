@@ -259,7 +259,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # BOT MAIN
 # -----------------------------
 def main():
-    TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+    TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"
 
     app = ApplicationBuilder().token(TOKEN).build()
 
