@@ -1,2 +1,2 @@
-python-telegram-bot=l
+python-telegram-bot
 requests
