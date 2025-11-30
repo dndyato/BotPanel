@@ -1,183 +1,167 @@
 import requests
 import time
-import asyncio
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    ConversationHandler,
-    filters
-)
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 
+# -----------------------------
+# CONFIG
+# -----------------------------
 API_URL = "https://egoistyato.pythonanywhere.com"
-BOT_TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"  # <<-- PUT TOKEN HERE
 ADMIN_PASSWORD = "yato123"
 
 ADMIN_LOGGED_IN = set()
+
+# -----------------------------
+# ADMIN LOGIN
+# -----------------------------
 ASK_PASS = 1
 
-
-# ---------------- ADMIN LOGIN ----------------
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Enter admin password:")
+def admin_panel(update, context):
+    update.message.reply_text("Enter admin password:")
     return ASK_PASS
 
-
-async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def admin_password(update, context):
     if update.message.text == ADMIN_PASSWORD:
         ADMIN_LOGGED_IN.add(update.message.from_user.id)
-        await update.message.reply_text("✅ Logged in as admin!")
+        update.message.reply_text("✅ Logged in as admin!")
     else:
-        await update.message.reply_text("❌ Wrong password.")
+        update.message.reply_text("❌ Wrong password.")
 
     return ConversationHandler.END
 
+# -----------------------------
+# CHECK ADMIN
+# -----------------------------
+def check_admin(user_id):
+    return user_id in ADMIN_LOGGED_IN
 
-def check_admin(uid):
-    return uid in ADMIN_LOGGED_IN
-
-
-# ---------------- ADD KEY ----------------
-async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-
-    if not check_admin(uid):
-        return await update.message.reply_text("❌ Admin only.")
+# -----------------------------
+# ADD KEY
+# -----------------------------
+def add_key(update, context):
+    if not check_admin(update.message.from_user.id):
+        return update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 3:
-        return await update.message.reply_text(
-            "Usage:\n/addkey KEY MAX_DEVICES YYYY-MM-DD"
-        )
+        return update.message.reply_text("Usage: /addkey KEY MAX_DEVICES YYYY-MM-DD")
 
     key = context.args[0]
-    max_devices = int(context.args[1])
+    max_devices = context.args[1]
     expires = context.args[2]
 
-    payload = {
+    r = requests.post(API_URL + "/api/bot/add_key", json={
         "password": ADMIN_PASSWORD,
         "key": key,
         "max_devices": max_devices,
         "expires": expires
-    }
+    })
 
-    r = requests.post(f"{API_URL}/api/bot/add_key", json=payload)
-    await update.message.reply_text(r.text)
+    update.message.reply_text(r.text)
 
-
-# ---------------- DELETE KEY ----------------
-async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-
-    if not check_admin(uid):
-        return await update.message.reply_text("❌ Admin only.")
+# -----------------------------
+# DELETE KEY
+# -----------------------------
+def delete_key(update, context):
+    if not check_admin(update.message.from_user.id):
+        return update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 1:
-        return await update.message.reply_text("Usage: /delkey KEY")
+        return update.message.reply_text("Usage: /delkey KEY")
 
     key = context.args[0]
 
-    payload = {
+    r = requests.post(API_URL + "/api/bot/delete_key", json={
         "password": ADMIN_PASSWORD,
         "key": key
-    }
+    })
 
-    r = requests.post(f"{API_URL}/api/bot/delete_key", json=payload)
-    await update.message.reply_text(r.text)
+    update.message.reply_text(r.text)
 
-
-# ---------------- CHECK KEY ----------------
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -----------------------------
+# CHECK KEY
+# -----------------------------
+def check(update, context):
     if len(context.args) < 1:
-        return await update.message.reply_text("Usage: /check KEY")
+        return update.message.reply_text("Usage: /check KEY")
 
     key = context.args[0]
-    r = requests.post(f"{API_URL}/check-key", json={"key": key, "device_id": ""})
 
+    r = requests.post(API_URL + "/check-key", json={"key": key, "device_id": ""})
     res = r.json()
 
     if res.get("valid"):
-        await update.message.reply_text("✅ Key is VALID!")
+        update.message.reply_text("✅ Key is VALID!")
     else:
-        await update.message.reply_text(f"❌ Invalid key.\nReason: {res.get('error')}")
+        update.message.reply_text(f"❌ Invalid key.\nReason: {res.get('error')}")
 
+# -----------------------------
+# STATS
+# -----------------------------
+def stats(update, context):
+    if not check_admin(update.message.from_user.id):
+        return update.message.reply_text("❌ Admin only.")
 
-# ---------------- STATS ----------------
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
+    r = requests.get(API_URL + "/api/bot/get_keys", params={
+        "password": ADMIN_PASSWORD
+    })
 
-    if not check_admin(uid):
-        return await update.message.reply_text("❌ Admin only.")
-
-    r = requests.get(f"{API_URL}/api/bot/get_keys?password={ADMIN_PASSWORD}")
     keys = r.json()
 
-    total = len(keys)
     active = 0
     expired = 0
+    now = datetime.now().date()
 
     for k in keys:
-        if isinstance(k, str):
-            continue
+        exp = datetime.strptime(k["expires"], "%Y-%m-%d").date()
+        if exp < now:
+            expired += 1
+        else:
+            active += 1
 
-        if "expires" in k:
-            try:
-                ts = time.mktime(time.strptime(k["expires"], "%Y-%m-%d"))
-                if ts < time.time():
-                    expired += 1
-                else:
-                    active += 1
-            except:
-                pass
-
-    await update.message.reply_text(
-        f"📊 *Key Stats*\n"
-        f"Total: {total}\n"
+    update.message.reply_text(
+        f"📊 Key Stats\n"
         f"Active: {active}\n"
-        f"Expired: {expired}",
-        parse_mode="Markdown"
+        f"Expired: {expired}"
     )
 
-
-# ---------------- START ----------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Welcome!\n"
+# -----------------------------
+# START
+# -----------------------------
+def start(update, context):
+    update.message.reply_text(
+        "Commands:\n"
         "/check KEY\n"
-        "/admin\n"
+        "/admin\n\n"
+        "Admin Commands:\n"
         "/addkey KEY MAX_DEVICES YYYY-MM-DD\n"
         "/delkey KEY\n"
         "/stats"
     )
 
+# -----------------------------
+# MAIN
+# -----------------------------
+def main():
+    TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"
 
-# ---------------- MAIN ----------------
-async def main():
-    print("🚀 Bot Starting...")
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
     admin_handler = ConversationHandler(
         entry_points=[CommandHandler("admin", admin_panel)],
-        states={ASK_PASS: [MessageHandler(filters.TEXT, admin_password)]},
-        fallbacks=[],
+        states={ASK_PASS: [MessageHandler(Filters.text, admin_password)]},
+        fallbacks=[]
     )
 
-    app.add_handler(admin_handler)
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("check", check))
-    app.add_handler(CommandHandler("addkey", add_key))
-    app.add_handler(CommandHandler("delkey", delete_key))
-    app.add_handler(CommandHandler("stats", stats))
+    dp.add_handler(admin_handler)
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("check", check))
+    dp.add_handler(CommandHandler("addkey", add_key))
+    dp.add_handler(CommandHandler("delkey", delete_key))
+    dp.add_handler(CommandHandler("stats", stats))
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-
-    print("🤖 Bot is running...")
-    await asyncio.Event().wait()
+    updater.start_polling()
+    updater.idle()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
