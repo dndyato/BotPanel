@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 
 API_URL = "https://egoistyato.pythonanywhere.com"
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # <<-- PUT TOKEN HERE
+BOT_TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"  # <<-- PUT TOKEN HERE
 ADMIN_PASSWORD = "yato123"
 
 ADMIN_LOGGED_IN = set()
