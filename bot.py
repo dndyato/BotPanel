@@ -10,57 +10,36 @@ from telegram.ext import (
     ConversationHandler, ContextTypes, filters
 )
 
-# ---------------------------------------------------
-# CONFIG
-# ---------------------------------------------------
 API_URL = "https://egoistyato.pythonanywhere.com"
 ADMIN_PASSWORD = "yato123"
 
 ADMIN_LOGGED_IN = set()
 ASK_PASS = 1
 
-# ---------------------------------------------------
-# ADMIN LOGIN
-# ---------------------------------------------------
+# -------------------- ADMIN LOGIN --------------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔐 **Admin Login Required**\n"
-        "Please enter your password:",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text("🔐 **Enter admin password:**", parse_mode="Markdown")
     return ASK_PASS
 
 async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == ADMIN_PASSWORD:
         ADMIN_LOGGED_IN.add(update.message.from_user.id)
-        await update.message.reply_text(
-            "✅ **Access Granted**\n"
-            "Welcome, Admin!",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("✅ **Admin access granted!**", parse_mode="Markdown")
     else:
-        await update.message.reply_text(
-            "❌ **Access Denied**\n"
-            "Incorrect password.",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("❌ Wrong password.")
     return ConversationHandler.END
 
 def check_admin(uid):
     return uid in ADMIN_LOGGED_IN
 
-# ---------------------------------------------------
-# ADD KEY
-# ---------------------------------------------------
+# -------------------- ADD KEY --------------------
 async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-    if not check_admin(uid):
-        return await update.message.reply_text("❌ Admin only.")
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ You are not an admin.")
 
     if len(context.args) < 3:
         return await update.message.reply_text(
-            "📘 **Usage:**\n"
-            "`/addkey KEY MAX_DEVICES YYYY-MM-DD`",
+            "Usage:\n`/addkey KEY MAX_DEVICES YYYY-MM-DD`\n\nExample:\n`/addkey test123 1 2025-12-31`",
             parse_mode="Markdown"
         )
 
@@ -74,50 +53,42 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "expires": expires
     })
 
-    await update.message.reply_text(
-        f"✨ **Key Added Successfully!**\n"
-        f"────────────────────────\n"
-        f"🔑 **Key:** `{key}`\n"
-        f"📦 **Max Devices:** `{max_devices}`\n"
-        f"📅 **Expires:** `{expires}`\n"
-        f"────────────────────────\n"
-        f"🌐 **Site:** https://egoistyato.pythonanywhere.com",
-        parse_mode="Markdown"
-    )
+    res = r.json()
 
-# ---------------------------------------------------
-# DELETE KEY
-# ---------------------------------------------------
-async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-    if not check_admin(uid):
-        return await update.message.reply_text("❌ Admin only.")
-
-    if len(context.args) < 1:
-        return await update.message.reply_text(
-            "📘 **Usage:** `/delkey KEY`",
+    if res.get("success"):
+        await update.message.reply_text(
+            f"🔑 **Key Added Successfully!**\n\n"
+            f"• Key: `{key}`\n"
+            f"• Max Devices: `{max_devices}`\n"
+            f"• Expires: `{expires}`\n"
+            f"🌐 Site: {API_URL}",
             parse_mode="Markdown"
         )
+    else:
+        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+
+# -------------------- DELETE KEY --------------------
+async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ You are not an admin.")
+
+    if len(context.args) < 1:
+        return await update.message.reply_text("Usage: /delkey KEY")
 
     key = context.args[0]
-    requests.post(API_URL + "/delete-key", json={"key": key})
 
-    await update.message.reply_text(
-        f"🗑️ **Key Deleted Successfully**\n"
-        f"────────────────────────\n"
-        f"🔑 `{key}` removed.\n",
-        parse_mode="Markdown"
-    )
+    r = requests.post(API_URL + "/delete-key", json={"key": key})
+    res = r.json()
 
-# ---------------------------------------------------
-# CHECK KEY
-# ---------------------------------------------------
+    if res.get("success"):
+        await update.message.reply_text(f"🗑️ Key `{key}` deleted.", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+
+# -------------------- CHECK KEY --------------------
 async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
-        return await update.message.reply_text(
-            "📘 Usage: `/check KEY`",
-            parse_mode="Markdown"
-        )
+        return await update.message.reply_text("Usage: /check KEY")
 
     key = context.args[0]
 
@@ -125,86 +96,65 @@ async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     res = r.json()
 
     if res.get("valid"):
-        await update.message.reply_text(
-            "✅ **Key Status: VALID**\n"
-            "This key is active and working.",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("✅ **Key is VALID!**", parse_mode="Markdown")
     else:
         await update.message.reply_text(
-            f"❌ **Key Status: INVALID**\n"
-            f"Reason: `{res.get('error')}`",
+            f"❌ Invalid Key\nReason: `{res.get('error')}`",
             parse_mode="Markdown"
         )
 
-# ---------------------------------------------------
-# STATS
-# ---------------------------------------------------
+# -------------------- STATS --------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-    if not check_admin(uid):
+    if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
 
-    r = requests.get(API_URL + "/get-keys")
+    r = requests.get(API_URL + "/api/bot/stats")
     keys = r.json()
 
+    now = datetime.now()
     total = len(keys)
     active = 0
     expired = 0
 
-    now = datetime.now()
-
     for k in keys:
-        exp = k["expires"]
         try:
-            exp_date = datetime.strptime(exp, "%Y-%m-%d")
+            exp = datetime.strptime(k["expires"], "%Y-%m-%d")
         except:
-            exp_date = datetime.strptime(exp, "%Y-%m-%d %H:%M:%S")
+            exp = datetime.strptime(k["expires"], "%Y-%m-%d %H:%M:%S")
 
-        if exp_date < now:
+        if exp < now:
             expired += 1
         else:
             active += 1
 
     await update.message.reply_text(
-        "📊 **Yato Panel — Key Statistics**\n"
-        "────────────────────────\n"
-        f"🔢 **Total Keys:** `{total}`\n"
-        f"🟢 **Active:** `{active}`\n"
-        f"🔴 **Expired:** `{expired}`\n"
-        "────────────────────────\n"
-        "🌐 https://egoistyato.pythonanywhere.com",
+        f"📊 **Panel Statistics**\n\n"
+        f"🔑 Total Keys: **{total}**\n"
+        f"🟢 Active: **{active}**\n"
+        f"🔴 Expired: **{expired}**\n"
+        f"🌐 Site: {API_URL}",
         parse_mode="Markdown"
     )
 
-# ---------------------------------------------------
-# GENKEY
-# ---------------------------------------------------
-def random_suffix(length=12):
+# -------------------- GENKEY --------------------
+def random_suffix(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
 def parse_duration(text):
     text = text.lower()
-    if text.endswith("d"):
-        return timedelta(days=int(text[:-1]))
-    if text.endswith("h"):
-        return timedelta(hours=int(text[:-1]))
-    if text.endswith("m"):
-        return timedelta(minutes=int(text[:-1]))
+    if text.endswith("d"): return timedelta(days=int(text[:-1]))
+    if text.endswith("h"): return timedelta(hours=int(text[:-1]))
+    if text.endswith("m"): return timedelta(minutes=int(text[:-1]))
     return None
 
 async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.message.from_user.id
-    if not check_admin(uid):
+    if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 3:
         return await update.message.reply_text(
-            "📘 **Usage:**\n"
-            "`/genkey AMOUNT DURATION MAX_DEVICES`\n\n"
-            "Example:\n"
-            "`/genkey 5 1d 1`",
+            "Usage:\n`/genkey AMOUNT DURATION MAX_DEVICES`\nExample: `/genkey 5 1d 1`",
             parse_mode="Markdown"
         )
 
@@ -213,7 +163,7 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     max_devices = int(context.args[2])
 
     if not duration:
-        return await update.message.reply_text("❌ Invalid duration. Use 1d, 2h, 30m")
+        return await update.message.reply_text("❌ Invalid duration. Use 1d, 1h, 30m")
 
     expiry = datetime.now() + duration
     expiry_text = expiry.strftime("%Y-%m-%d %H:%M:%S")
@@ -231,40 +181,34 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "expires": expiry_text
         })
 
-    formatted_keys = "\n".join(f"`{k}`" for k in generated)
+    msg = "\n".join(f"`{k}`" for k in generated)
 
     await update.message.reply_text(
-        f"🎉 **Successfully Generated {amount} Keys!**\n"
-        f"────────────────────────\n"
-        f"{formatted_keys}\n\n"
-        f"⏳ **Duration:** `{context.args[1]}`\n"
-        f"📅 **Expires:** `{expiry_text}`\n"
-        f"📦 **Max Devices:** `{max_devices}`\n"
-        f"────────────────────────\n"
-        f"🌐 **Site:** https://egoistyato.pythonanywhere.com",
+        f"🎉 **Generated {amount} Keys!**\n\n"
+        f"{msg}\n\n"
+        f"⏳ Duration: `{context.args[1]}`\n"
+        f"📅 Expires: `{expiry_text}`\n"
+        f"📦 Max Devices: `{max_devices}`\n"
+        f"🌐 Site: {API_URL}",
         parse_mode="Markdown"
     )
 
-# ---------------------------------------------------
-# START
-# ---------------------------------------------------
+# -------------------- START --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "✨ **Welcome to Yato Bot!**\n"
-        "Here are your available commands:\n\n"
-        "🔍 `/check KEY`\n"
-        "🔐 `/admin`\n\n"
+        "👋 **Welcome to Yato Panel Bot!**\n\n"
+        "**User Commands:**\n"
+        "• `/check KEY` – Check if a key is valid\n\n"
         "**Admin Commands:**\n"
-        "➕ `/addkey KEY MAX_DEVICES YYYY-MM-DD`\n"
-        "➖ `/delkey KEY`\n"
-        "📊 `/stats`\n"
-        "⚙️ `/genkey AMOUNT DURATION MAX_DEVICES`\n",
+        "• `/admin` – Login\n"
+        "• `/addkey KEY MAXDEV YYYY-MM-DD`\n"
+        "• `/delkey KEY`\n"
+        "• `/stats` – Show panel stats\n"
+        "• `/genkey AMOUNT TIME MAXDEV`",
         parse_mode="Markdown"
     )
 
-# ---------------------------------------------------
-# MAIN
-# ---------------------------------------------------
+# -------------------- MAIN --------------------
 def main():
     TOKEN = "8316549162:AAG3O0KBhuSjFjmuZ0UEedtp_UwPA7J9wMs"
     app = ApplicationBuilder().token(TOKEN).build()
