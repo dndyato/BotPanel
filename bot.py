@@ -18,13 +18,13 @@ ASK_PASS = 1
 
 # -------------------- ADMIN LOGIN --------------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔐 **Enter admin password:**", parse_mode="Markdown")
+    await update.message.reply_text("🔐 Enter admin password:", parse_mode="Markdown")
     return ASK_PASS
 
 async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text == ADMIN_PASSWORD:
         ADMIN_LOGGED_IN.add(update.message.from_user.id)
-        await update.message.reply_text("✅ **Admin access granted!**", parse_mode="Markdown")
+        await update.message.reply_text("✅ Admin access granted!", parse_mode="Markdown")
     else:
         await update.message.reply_text("❌ Wrong password.")
     return ConversationHandler.END
@@ -35,11 +35,11 @@ def check_admin(uid):
 # -------------------- ADD KEY --------------------
 async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
-        return await update.message.reply_text("❌ You are not an admin.")
+        return await update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 3:
         return await update.message.reply_text(
-            "Usage:\n`/addkey KEY MAX_DEVICES YYYY-MM-DD`\n\nExample:\n`/addkey test123 1 2025-12-31`",
+            "Usage:\n`/addkey KEY MAX_DEVICES YYYY-MM-DD`",
             parse_mode="Markdown"
         )
 
@@ -47,7 +47,8 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     max_devices = int(context.args[1])
     expires = context.args[2]
 
-    r = requests.post(API_URL + "/add-key", json={
+    r = requests.post(API_URL + "/api/bot/add_key", json={
+        "password": ADMIN_PASSWORD,
         "key": key,
         "max_devices": max_devices,
         "expires": expires
@@ -70,14 +71,18 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------------- DELETE KEY --------------------
 async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
-        return await update.message.reply_text("❌ You are not an admin.")
+        return await update.message.reply_text("❌ Admin only.")
 
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /delkey KEY")
 
     key = context.args[0]
 
-    r = requests.post(API_URL + "/delete-key", json={"key": key})
+    r = requests.post(API_URL + "/api/bot/delete_key", json={
+        "password": ADMIN_PASSWORD,
+        "key": key
+    })
+
     res = r.json()
 
     if res.get("success"):
@@ -203,7 +208,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/admin` – Login\n"
         "• `/addkey KEY MAXDEV YYYY-MM-DD`\n"
         "• `/delkey KEY`\n"
-        "• `/stats` – Show panel stats\n"
+        "• `/stats`\n"
         "• `/genkey AMOUNT TIME MAXDEV`",
         parse_mode="Markdown"
     )
@@ -227,7 +232,7 @@ def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("genkey", genkey))
 
-    print("🤖 Bot is running...")
+    print("🤖 Bot Running…")
     app.run_polling()
 
 if __name__ == "__main__":
