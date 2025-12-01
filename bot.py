@@ -1,5 +1,4 @@
 import requests
-import time
 import random
 import string
 from datetime import datetime, timedelta
@@ -115,33 +114,29 @@ async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# 🔵 -------------------- FIXED: CHECK INFO --------------------
+# -------------------- CHECK INFO --------------------
 async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /checkinfo KEY")
 
     key = context.args[0]
 
-    r = requests.get(API_URL + f"/api/bot/get_key/{key}")
+    r = requests.get(API_URL + "/api/bot/checkinfo", params={"key": key})
     res = safe_json(r)
 
     if not res.get("success"):
         return await update.message.reply_text(f"❌ Error: `{res.get('error')}`", parse_mode="Markdown")
 
-    data = res.get("data", {})
-
-    msg = (
+    await update.message.reply_text(
         "🔍 **Key Information**\n\n"
-        f"🔑 Key: `{data.get('key', 'N/A')}`\n"
-        f"📦 Max Devices: `{data.get('max_devices', '0')}`\n"
-        f"📱 Used Devices: `{len(data.get('devices', []))}`\n"
-        f"📅 Expires: `{data.get('expires', 'N/A')}`\n"
-        f"🟢 Status: {'ACTIVE' if data.get('active') else 'EXPIRED'}"
+        f"🔑 Key: `{res.get('key')}`\n"
+        f"📦 Max Devices: `{res.get('max_devices')}`\n"
+        f"📱 Used Devices: `{res.get('used_devices')}`\n"
+        f"📅 Expires: `{res.get('expires')}`",
+        parse_mode="Markdown"
     )
 
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-# 🔵 -------------------- FIXED: EXTEND KEY --------------------
+# -------------------- EXTEND KEY --------------------
 async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -152,7 +147,7 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = context.args[0]
     days = int(context.args[1])
 
-    r = requests.post(API_URL + "/api/bot/extend_key", json={
+    r = requests.post(API_URL + "/api/bot/extend", json={
         "password": ADMIN_PASSWORD,
         "key": key,
         "days": days
@@ -164,8 +159,8 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"⏳ **Key Extended!**\n\n"
             f"🔑 Key: `{key}`\n"
-            f"➕ Added Days: `{days}`\n"
-            f"📅 New Expiry: `{res.get('new_expiry', 'N/A')}`",
+            f"➕ Days Added: `{days}`\n"
+            f"📅 New Expiry: `{res.get('new_exp')}`",
             parse_mode="Markdown"
         )
     else:
@@ -179,24 +174,19 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r = requests.get(API_URL + "/api/bot/stats")
     res = safe_json(r)
 
-    if "error" in res:
-        return await update.message.reply_text(f"❌ Error: {res['error']}")
-
-    keys = res if isinstance(res, list) else res.get("keys", [])
+    if not isinstance(res, list):
+        return await update.message.reply_text(f"❌ Error: Unexpected response", parse_mode="Markdown")
 
     now = datetime.now()
-    total = len(keys)
+    total = len(res)
     active = 0
     expired = 0
 
-    for k in keys:
+    for k in res:
         try:
             exp = datetime.strptime(k["expires"], "%Y-%m-%d")
         except:
-            try:
-                exp = datetime.strptime(k["expires"], "%Y-%m-%d %H:%M:%S")
-            except:
-                continue
+            exp = datetime.strptime(k["expires"], "%Y-%m-%d %H:%M:%S")
 
         if exp < now:
             expired += 1
@@ -245,11 +235,9 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expiry_text = expiry.strftime("%Y-%m-%d %H:%M:%S")
 
     generated = []
-
     for _ in range(amount):
         key = "Yato-" + random_suffix()
         generated.append(key)
-
         requests.post(API_URL + "/api/bot/add_key", json={
             "password": ADMIN_PASSWORD,
             "key": key,
@@ -257,8 +245,7 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "expires": expiry_text
         })
 
-    msg = "\n".mmjoin(f"`{k}`" for k in generated)
-
+    msg = "\n".join(f"`{k}`" for k in generated)
     await update.message.reply_text(
         f"🎉 **Generated {amount} Keys!**\n\n"
         f"{msg}\n\n"
