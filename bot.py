@@ -15,14 +15,18 @@ ADMIN_PASSWORD = "yato123"
 ADMIN_LOGGED_IN = set()
 ASK_PASS = 1
 
-# -------------------- SAFE JSON --------------------
+# ---------------------------------------------------
+# SAFE JSON
+# ---------------------------------------------------
 def safe_json(r):
     try:
         return r.json()
     except:
         return {"success": False, "error": "Invalid JSON response from server"}
 
-# -------------------- ADMIN LOGIN --------------------
+# ---------------------------------------------------
+# ADMIN LOGIN
+# ---------------------------------------------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔐 Enter admin password:", parse_mode="Markdown")
     return ASK_PASS
@@ -38,7 +42,9 @@ async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def check_admin(uid):
     return uid in ADMIN_LOGGED_IN
 
-# -------------------- ADD KEY --------------------
+# ---------------------------------------------------
+# ADD KEY
+# ---------------------------------------------------
 async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -46,7 +52,7 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 3:
         return await update.message.reply_text(
             "Usage:\n`/addkey KEY MAX_DEVICES YYYY-MM-DD`",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
 
     key = context.args[0]
@@ -69,12 +75,14 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• Max Devices: `{max_devices}`\n"
             f"• Expires: `{expires}`\n"
             f"🌐 Site: {API_URL}",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# -------------------- DELETE KEY --------------------
+# ---------------------------------------------------
+# DELETE KEY
+# ---------------------------------------------------
 async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -96,7 +104,9 @@ async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# -------------------- CHECK KEY --------------------
+# ---------------------------------------------------
+# CHECK KEY VALIDITY
+# ---------------------------------------------------
 async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /check KEY")
@@ -114,7 +124,9 @@ async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# -------------------- CHECK INFO --------------------
+# ---------------------------------------------------
+# CHECK INFO
+# ---------------------------------------------------
 async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /checkinfo KEY")
@@ -133,10 +145,19 @@ async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📦 Max Devices: `{res.get('max_devices')}`\n"
         f"📱 Used Devices: `{res.get('used_devices')}`\n"
         f"📅 Expires: `{res.get('expires')}`",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
-# -------------------- EXTEND KEY --------------------
+# ---------------------------------------------------
+# FIXED EXTEND KEY WITH DURATION PARSER
+# ---------------------------------------------------
+def parse_days(value):
+    """Accepts: 1 => 1 day, '1d' => 1 day, '5d' => 5 days"""
+    v = value.lower()
+    if v.endswith("d"):
+        return int(v[:-1])
+    return int(v)
+
 async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -145,7 +166,11 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Usage: /extend KEY DAYS")
 
     key = context.args[0]
-    days = int(context.args[1])
+
+    try:
+        days = parse_days(context.args[1])
+    except:
+        return await update.message.reply_text("❌ Invalid duration. Example: 1d / 7d / 10")
 
     r = requests.post(API_URL + "/api/bot/extend", json={
         "password": ADMIN_PASSWORD,
@@ -166,7 +191,9 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# -------------------- STATS --------------------
+# ---------------------------------------------------
+# STATS
+# ---------------------------------------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -175,7 +202,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     res = safe_json(r)
 
     if not isinstance(res, list):
-        return await update.message.reply_text(f"❌ Error: Unexpected response", parse_mode="Markdown")
+        return await update.message.reply_text("❌ Unexpected server response")
 
     now = datetime.now()
     total = len(res)
@@ -199,10 +226,12 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🟢 Active: **{active}**\n"
         f"🔴 Expired: **{expired}**\n"
         f"🌐 Site: {API_URL}",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
-# -------------------- GENKEY --------------------
+# ---------------------------------------------------
+# GENKEY
+# ---------------------------------------------------
 def random_suffix(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
@@ -221,7 +250,7 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 3:
         return await update.message.reply_text(
             "Usage:\n`/genkey AMOUNT DURATION MAX_DEVICES`\nExample: `/genkey 5 1d 1`",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
 
     amount = int(context.args[0])
@@ -256,7 +285,9 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# -------------------- START --------------------
+# ---------------------------------------------------
+# START MESSAGE
+# ---------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 **Welcome to Yato Panel Bot!**\n\n"
@@ -273,7 +304,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# -------------------- MAIN --------------------
+# ---------------------------------------------------
+# MAIN
+# ---------------------------------------------------
 def main():
     TOKEN = "8316549162:AAHAOOCTDzeAn0ClziHmc03dj3NBSNpGatA"
     app = ApplicationBuilder().token(TOKEN).build()
@@ -285,6 +318,7 @@ def main():
     )
 
     app.add_handler(admin_conv)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("check", check_key))
     app.add_handler(CommandHandler("checkinfo", check_info))
