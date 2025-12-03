@@ -3,7 +3,7 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ConversationHandler, ContextTypes, filters
@@ -14,6 +14,7 @@ ADMIN_PASSWORD = "yato123"
 
 ADMIN_LOGGED_IN = set()
 ASK_PASS = 1
+WAITING_FILE = {}
 
 # ---------------------------------------------------
 # SAFE JSON
@@ -43,7 +44,7 @@ def check_admin(uid):
     return uid in ADMIN_LOGGED_IN
 
 # ---------------------------------------------------
-# ADD KEY
+# ADD KEY (unchanged)
 # ---------------------------------------------------
 async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
@@ -81,7 +82,7 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
 # ---------------------------------------------------
-# DELETE KEY
+# DELETE KEY (unchanged)
 # ---------------------------------------------------
 async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
@@ -105,7 +106,7 @@ async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
 # ---------------------------------------------------
-# CHECK KEY VALIDITY
+# CHECK KEY VALIDITY (unchanged)
 # ---------------------------------------------------
 async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
@@ -125,7 +126,7 @@ async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ---------------------------------------------------
-# CHECK INFO
+# CHECK INFO (unchanged)
 # ---------------------------------------------------
 async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
@@ -144,15 +145,14 @@ async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔑 Key: `{res.get('key')}`\n"
         f"📦 Max Devices: `{res.get('max_devices')}`\n"
         f"📱 Used Devices: `{res.get('used_devices')}`\n"
-        f"📅 Expires: `{res.get('expires')}`",
+        f"🕒 Expires: `{res.get('expires')}`",
         parse_mode="Markdown",
     )
 
 # ---------------------------------------------------
-# FIXED EXTEND KEY WITH DURATION PARSER
+# EXTEND KEY (unchanged)
 # ---------------------------------------------------
 def parse_days(value):
-    """Accepts: 1 => 1 day, '1d' => 1 day, '5d' => 5 days"""
     v = value.lower()
     if v.endswith("d"):
         return int(v[:-1])
@@ -185,14 +185,14 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ **Key Extended!**\n\n"
             f"🔑 Key: `{key}`\n"
             f"➕ Days Added: `{days}`\n"
-            f"📅 New Expiry: `{res.get('new_exp')}`",
+            f"🕒 New Expiry: `{res.get('new_exp')}`",
             parse_mode="Markdown"
         )
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
 # ---------------------------------------------------
-# STATS
+# STATS (unchanged)
 # ---------------------------------------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
@@ -230,7 +230,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ---------------------------------------------------
-# GENKEY
+# GENKEY (unchanged)
 # ---------------------------------------------------
 def random_suffix(length=10):
     chars = string.ascii_letters + string.digits
@@ -279,28 +279,111 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎉 **Generated {amount} Keys!**\n\n"
         f"{msg}\n\n"
         f"⏳ Duration: `{context.args[1]}`\n"
-        f"📅 Expires: `{expiry_text}`\n"
+        f"🕒 Expires: `{expiry_text}`\n"
         f"📦 Max Devices: `{max_devices}`\n"
         f"🌐 Site: {API_URL}",
         parse_mode="Markdown"
     )
 
 # ---------------------------------------------------
-# START MESSAGE
+# NEW: /addfile → wait for file upload
+# ---------------------------------------------------
+async def addfile(update: Update, context):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    WAITING_FILE[update.message.from_user.id] = True
+    await update.message.reply_text("📤 Send the `.txt` file you want to upload.")
+    
+async def file_receiver(update: Update, context):
+    uid = update.message.from_user.id
+
+    if uid not in WAITING_FILE:
+        return
+
+    del WAITING_FILE[uid]  # clear flag after receiving file
+
+    doc = update.message.document
+    if not doc.file_name.endswith(".txt"):
+        return await update.message.reply_text("❌ Only `.txt` allowed.")
+
+    file_bytes = await doc.get_file()
+    file_content = await file_bytes.download_as_bytearray()
+
+    r = requests.post(
+        API_URL + "/api/bot/upload",
+        files={"file": (doc.file_name, file_content)},
+        data={"password": ADMIN_PASSWORD},
+    )
+
+    res = safe_json(r)
+    if res.get("success"):
+        await update.message.reply_text(f"✅ Uploaded `{doc.file_name}`")
+    else:
+        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+
+# ---------------------------------------------------
+# NEW: /listfiles
+# ---------------------------------------------------
+async def listfiles(update: Update, context):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    r = requests.get(API_URL + "/api/bot/listfiles")
+    res = safe_json(r)
+
+    if not res.get("success"):
+        return await update.message.reply_text("❌ Failed to fetch file list.")
+
+    txt = "📁 **Stored Files:**\n\n"
+    for f in res["files"]:
+        txt += f"• `{f['name']}` — {f['size_kb']} KB — {f['lines']} lines\n"
+
+    await update.message.reply_text(txt, parse_mode="Markdown")
+
+# ---------------------------------------------------
+# NEW: /deletefile filename.txt
+# ---------------------------------------------------
+async def deletefile(update: Update, context):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    if len(context.args) < 1:
+        return await update.message.reply_text("Usage: /deletefile filename.txt")
+
+    filename = context.args[0]
+
+    r = requests.post(
+        API_URL + "/api/bot/deletefile",
+        json={"password": ADMIN_PASSWORD, "filename": filename},
+    )
+
+    res = safe_json(r)
+
+    if res.get("success"):
+        await update.message.reply_text(f"🗑️ Deleted `{filename}`")
+    else:
+        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+
+# ---------------------------------------------------
+# START MESSAGE (unchanged)
 # ---------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 **Welcome to Yato Panel Bot!**\n\n"
         "**User Commands:**\n"
-        "• `/check KEY` – Check if a key is valid\n"
-        "• `/checkinfo KEY` – Detailed key info\n\n"
+        "• `/check KEY`\n"
+        "• `/checkinfo KEY`\n\n"
         "**Admin Commands:**\n"
-        "• `/admin` – Login\n"
-        "• `/addkey KEY MAXDEV YYYY-MM-DD`\n"
-        "• `/delkey KEY`\n"
-        "• `/extend KEY DAYS`\n"
+        "• `/admin`\n"
+        "• `/addkey`\n"
+        "• `/delkey`\n"
+        "• `/extend`\n"
         "• `/stats`\n"
-        "• `/genkey AMOUNT TIME MAXDEV`",
+        "• `/genkey`\n"
+        "• `/addfile`\n"
+        "• `/listfiles`\n"
+        "• `/deletefile filename.txt`",
         parse_mode="Markdown"
     )
 
@@ -319,6 +402,7 @@ def main():
 
     app.add_handler(admin_conv)
 
+    # normal commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("check", check_key))
     app.add_handler(CommandHandler("checkinfo", check_info))
@@ -327,6 +411,14 @@ def main():
     app.add_handler(CommandHandler("delkey", delete_key))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("genkey", genkey))
+
+    # new file commands
+    app.add_handler(CommandHandler("addfile", addfile))
+    app.add_handler(CommandHandler("listfiles", listfiles))
+    app.add_handler(CommandHandler("deletefile", deletefile))
+
+    # receives sent files
+    app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
 
     print("🤖 Bot Running…")
     app.run_polling()
