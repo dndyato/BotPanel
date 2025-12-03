@@ -391,7 +391,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ---------------------------------------------------
 def main():
-    TOKEN = "8316549162:AAHAOOCTDzeAn0ClziHmc03dj3NBSNpGatA"
+    TOKEN = "8316549162:AAEyrIF02nPnge0b5jDSVPJUcidF8BihBcc"
     app = ApplicationBuilder().token(TOKEN).build()
 
     admin_conv = ConversationHandler(
