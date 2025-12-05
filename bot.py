@@ -301,7 +301,7 @@ async def file_receiver(update: Update, context):
     if uid not in WAITING_FILE:
         return
 
-    del WAITING_FILE[uid]  # clear flag after receiving file
+    del WAITING_FILE[uid]
 
     doc = update.message.document
     if not doc.file_name.endswith(".txt"):
@@ -366,6 +366,42 @@ async def deletefile(update: Update, context):
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
 # ---------------------------------------------------
+# ⭐ NEW FEATURE: /addaccess KEY (save to access.json)
+# ---------------------------------------------------
+async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    if len(context.args) < 1:
+        return await update.message.reply_text("Usage: /addaccess KEY")
+
+    key = context.args[0]
+
+    # Auto expire after 1 day (you can change this)
+    expires = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    payload = {
+        "password": ADMIN_PASSWORD,
+        "key": key,
+        "expires": expires
+    }
+
+    r = requests.post(API_URL + "/api/bot/addaccess", json=payload)
+    res = safe_json(r)
+
+    if res.get("success"):
+        await update.message.reply_text(
+            f"🔑 **Access Key Saved!**\n\n"
+            f"• Key: `{key}`\n"
+            f"• Expires: `{expires}`\n"
+            f"• Saved to: `access.json`\n"
+            f"🌐 Site: {API_URL}",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+
+# ---------------------------------------------------
 # START MESSAGE (unchanged)
 # ---------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -383,7 +419,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/genkey`\n"
         "• `/addfile`\n"
         "• `/listfiles`\n"
-        "• `/deletefile filename.txt`",
+        "• `/deletefile filename.txt`\n"
+        "• `/addaccess KEY`  *(new)*",
         parse_mode="Markdown"
     )
 
@@ -411,6 +448,9 @@ def main():
     app.add_handler(CommandHandler("delkey", delete_key))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("genkey", genkey))
+
+    # NEW /addaccess
+    app.add_handler(CommandHandler("addaccess", addaccess))
 
     # new file commands
     app.add_handler(CommandHandler("addfile", addfile))
