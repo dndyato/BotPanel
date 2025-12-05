@@ -489,7 +489,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # -----------------------------------------
 def main():
-    TOKEN = "8316549162:AAEyrIF02nPnge0b5jDSVPJUcidF8BihBcc"
+    TOKEN = "8316549162:AAEtHGLTkAZq2QJTSOZcfKQAbyVYZi4bb6w"
     app = ApplicationBuilder().token(TOKEN).build()
 
     # login
