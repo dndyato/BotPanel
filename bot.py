@@ -1,6 +1,8 @@
 import requests
 import random
 import string
+import json
+import os
 from datetime import datetime, timedelta
 
 from telegram import Update, InputFile
@@ -16,18 +18,43 @@ ADMIN_LOGGED_IN = set()
 ASK_PASS = 1
 WAITING_FILE = {}
 
-# ---------------------------------------------------
+GROUPS_FILE = "groups.json"
+
+# -----------------------------------------
+# Load groups
+# -----------------------------------------
+if os.path.exists(GROUPS_FILE):
+    with open(GROUPS_FILE, "r") as f:
+        GROUPS = json.load(f)
+else:
+    GROUPS = []
+
+def save_groups():
+    with open(GROUPS_FILE, "w") as f:
+        json.dump(GROUPS, f, indent=4)
+
+# -----------------------------------------
+# Capture group join
+# -----------------------------------------
+async def group_handler(update: Update, context):
+    chat = update.effective_chat
+    if chat.type in ["group", "supergroup"]:
+        if chat.id not in GROUPS:
+            GROUPS.append(chat.id)
+            save_groups()
+
+# -----------------------------------------
 # SAFE JSON
-# ---------------------------------------------------
+# -----------------------------------------
 def safe_json(r):
     try:
         return r.json()
     except:
         return {"success": False, "error": "Invalid JSON response from server"}
 
-# ---------------------------------------------------
+# -----------------------------------------
 # ADMIN LOGIN
-# ---------------------------------------------------
+# -----------------------------------------
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔐 Enter admin password:", parse_mode="Markdown")
     return ASK_PASS
@@ -43,9 +70,10 @@ async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def check_admin(uid):
     return uid in ADMIN_LOGGED_IN
 
-# ---------------------------------------------------
-# ADD KEY (unchanged)
-# ---------------------------------------------------
+
+# -----------------------------------------
+# ADD KEY
+# -----------------------------------------
 async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -81,9 +109,9 @@ async def add_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
-# DELETE KEY (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# DELETE KEY
+# -----------------------------------------
 async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -105,9 +133,9 @@ async def delete_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
-# CHECK KEY VALIDITY (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# CHECK KEY
+# -----------------------------------------
 async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /check KEY")
@@ -125,9 +153,9 @@ async def check_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# ---------------------------------------------------
-# CHECK INFO (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# CHECK INFO
+# -----------------------------------------
 async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
         return await update.message.reply_text("Usage: /checkinfo KEY")
@@ -149,9 +177,9 @@ async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
-# ---------------------------------------------------
-# EXTEND KEY (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# EXTEND KEY
+# -----------------------------------------
 def parse_days(value):
     v = value.lower()
     if v.endswith("d"):
@@ -191,9 +219,9 @@ async def extend_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
-# STATS (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# STATS
+# -----------------------------------------
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -229,9 +257,9 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
-# ---------------------------------------------------
-# GENKEY (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# GENKEY
+# -----------------------------------------
 def random_suffix(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
@@ -285,9 +313,9 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ---------------------------------------------------
-# NEW: /addfile → wait for file upload
-# ---------------------------------------------------
+# --------------------------------------------------------------------
+# NEW: /addfile — bot waits for file upload
+# --------------------------------------------------------------------
 async def addfile(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -307,24 +335,60 @@ async def file_receiver(update: Update, context):
     if not doc.file_name.endswith(".txt"):
         return await update.message.reply_text("❌ Only `.txt` allowed.")
 
+    # download file
     file_bytes = await doc.get_file()
     file_content = await file_bytes.download_as_bytearray()
 
+    # Count lines
+    text = file_content.decode("utf-8", errors="ignore")
+    lines = len(text.splitlines())
+    size_kb = round(len(file_content) / 1024, 2)
+
+    filename = doc.file_name
+
+    # upload to server
     r = requests.post(
         API_URL + "/api/bot/upload",
-        files={"file": (doc.file_name, file_content)},
+        files={"file": (filename, file_content)},
         data={"password": ADMIN_PASSWORD},
     )
 
     res = safe_json(r)
-    if res.get("success"):
-        await update.message.reply_text(f"✅ Uploaded `{doc.file_name}`")
-    else:
-        await update.message.reply_text(f"❌ Error: {res.get('error')}")
+    if not res.get("success"):
+        return await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
+    await update.message.reply_text(f"✅ Uploaded `{filename}`")
+
+    # ------------------------------------------------
+    # broadcast to all groups
+    # ------------------------------------------------
+    now = datetime.now().strftime("%Y-%m-%d")
+    time_now = datetime.now().strftime("%H:%M:%S")
+
+    broadcast_msg = (
+f"📢 **New Data Added**\n"
+f"🚀 Fresh logs are now live – enjoy the latest results!\n"
+f"━━━━━━━━━━━━━━━\n\n"
+f"📊 **Lines:** {lines}\n"
+f"📅 **Added:** {now}\n"
+f"⏰ **Time:** {time_now}\n"
+f"✅ **Status:** Ready to search!\n"
+f"📤 Export available.\n\n"
+f"📁 **File:** `{filename}`\n"
+f"💾 **Size:** {size_kb} KB\n\n"
+f"━━━━━━━━━━━━━━━\n"
+f"Search now to generate accounts from these fresh rows! 🚀"
+    )
+
+    for gid in GROUPS:
+        try:
+            await context.bot.send_message(chat_id=gid, text=broadcast_msg, parse_mode="Markdown")
+        except Exception:
+            pass
+
+# -----------------------------------------
 # NEW: /listfiles
-# ---------------------------------------------------
+# -----------------------------------------
 async def listfiles(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -341,9 +405,9 @@ async def listfiles(update: Update, context):
 
     await update.message.reply_text(txt, parse_mode="Markdown")
 
-# ---------------------------------------------------
-# NEW: /deletefile filename.txt
-# ---------------------------------------------------
+# -----------------------------------------
+# DELETE FILE
+# -----------------------------------------
 async def deletefile(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -365,9 +429,9 @@ async def deletefile(update: Update, context):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
-# ⭐ NEW FEATURE: /addaccess KEY (save to access.json)
-# ---------------------------------------------------
+# -----------------------------------------
+# NEW: /addaccess (new server route)
+# -----------------------------------------
 async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -376,17 +440,14 @@ async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Usage: /addaccess KEY")
 
     key = context.args[0]
-
-    # Auto expire after 1 day (you can change this)
     expires = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    payload = {
+    r = requests.post(API_URL + "/api/bot/addaccess", json={
         "password": ADMIN_PASSWORD,
         "key": key,
         "expires": expires
-    }
+    })
 
-    r = requests.post(API_URL + "/api/bot/addaccess", json=payload)
     res = safe_json(r)
 
     if res.get("success"):
@@ -401,9 +462,9 @@ async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ Error: {res.get('error')}")
 
-# ---------------------------------------------------
-# START MESSAGE (unchanged)
-# ---------------------------------------------------
+# -----------------------------------------
+# START MESSAGE
+# -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 **Welcome to Yato Panel Bot!**\n\n"
@@ -420,24 +481,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/addfile`\n"
         "• `/listfiles`\n"
         "• `/deletefile filename.txt`\n"
-        "• `/addaccess KEY`  *(new)*",
+        "• `/addaccess KEY`",
         parse_mode="Markdown"
     )
 
-# ---------------------------------------------------
+# -----------------------------------------
 # MAIN
-# ---------------------------------------------------
+# -----------------------------------------
 def main():
     TOKEN = "8316549162:AAEyrIF02nPnge0b5jDSVPJUcidF8BihBcc"
     app = ApplicationBuilder().token(TOKEN).build()
 
+    # login
     admin_conv = ConversationHandler(
         entry_points=[CommandHandler("admin", admin_panel)],
         states={ASK_PASS: [MessageHandler(filters.TEXT, admin_password)]},
         fallbacks=[]
     )
-
     app.add_handler(admin_conv)
+
+    # group tracking
+    app.add_handler(MessageHandler(filters.ALL, group_handler))
 
     # normal commands
     app.add_handler(CommandHandler("start", start))
@@ -449,15 +513,15 @@ def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("genkey", genkey))
 
-    # NEW /addaccess
+    # new /addaccess
     app.add_handler(CommandHandler("addaccess", addaccess))
 
-    # new file commands
+    # file commands
     app.add_handler(CommandHandler("addfile", addfile))
     app.add_handler(CommandHandler("listfiles", listfiles))
     app.add_handler(CommandHandler("deletefile", deletefile))
 
-    # receives sent files
+    # receive documents
     app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
 
     print("🤖 Bot Running…")
