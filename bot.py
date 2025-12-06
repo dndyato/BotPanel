@@ -561,24 +561,24 @@ def main():
 
     app.add_handler(admin_conv)
 
-# commands
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("check", check_key))
-app.add_handler(CommandHandler("checkinfo", check_info))
-app.add_handler(CommandHandler("extend", extend_key))
-app.add_handler(CommandHandler("addkey", add_key))
-app.add_handler(CommandHandler("delkey", delete_key))
-app.add_handler(CommandHandler("stats", stats))
-app.add_handler(CommandHandler("genkey", genkey))
-app.add_handler(CommandHandler("addaccess", addaccess))
-app.add_handler(CommandHandler("testbroadcast", testbroadcast))   # FIXED
-app.add_handler(CommandHandler("broadcast", broadcast))           # NEW
+    # commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("check", check_key))
+    app.add_handler(CommandHandler("checkinfo", check_info))
+    app.add_handler(CommandHandler("extend", extend_key))
+    app.add_handler(CommandHandler("addkey", add_key))
+    app.add_handler(CommandHandler("delkey", delete_key))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("genkey", genkey))
+    app.add_handler(CommandHandler("addaccess", addaccess))
+    app.add_handler(CommandHandler("testbroadcast", testbroadcast))   # FIXED
+    app.add_handler(CommandHandler("broadcast", broadcast))           # ADDED
 
-# file management
-app.add_handler(CommandHandler("addfile", addfile))
-app.add_handler(CommandHandler("listfiles", listfiles))
-app.add_handler(CommandHandler("deletefile", deletefile))
-app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
+    # file management
+    app.add_handler(CommandHandler("addfile", addfile))
+    app.add_handler(CommandHandler("listfiles", listfiles))
+    app.add_handler(CommandHandler("deletefile", deletefile))
+    app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
 
     # admin tracking
     app.add_handler(ChatMemberHandler(track_bot_status, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -586,6 +586,6 @@ app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
     print("🤖 Bot Running…")
     app.run_polling()
 
-
 if __name__ == "__main__":
     main()
+    
