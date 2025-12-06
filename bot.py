@@ -492,6 +492,33 @@ async def track_bot_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             ADMIN_GROUPS.discard(chat.id)
 
+# ---------------------------------------------------
+# BROADCAST CUSTOM MESSAGE
+# ---------------------------------------------------
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    if not context.args:
+        return await update.message.reply_text(
+            "Usage:\n`/broadcast your message here`",
+            parse_mode="Markdown"
+        )
+
+    msg = " ".join(context.args)
+
+    if not ADMIN_GROUPS:
+        return await update.message.reply_text("⚠️ No admin groups detected!")
+
+    sent = 0
+    for gid in list(ADMIN_GROUPS):
+        try:
+            await context.bot.send_message(chat_id=gid, text=msg, parse_mode="Markdown")
+            sent += 1
+        except:
+            pass
+
+    await update.message.reply_text(f"📢 Broadcast sent to **{sent}** groups.")
 
 # ---------------------------------------------------
 # START MESSAGE
@@ -534,23 +561,24 @@ def main():
 
     app.add_handler(admin_conv)
 
-    # commands
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("check", check_key))
-    app.add_handler(CommandHandler("checkinfo", check_info))
-    app.add_handler(CommandHandler("extend", extend_key))
-    app.add_handler(CommandHandler("addkey", add_key))
-    app.add_handler(CommandHandler("delkey", delete_key))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("genkey", genkey))
-    app.add_handler(CommandHandler("addaccess", addaccess))
-    app.add_handler(CommandHandler("testbroadcast", testbroadcast))
+# commands
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("check", check_key))
+app.add_handler(CommandHandler("checkinfo", check_info))
+app.add_handler(CommandHandler("extend", extend_key))
+app.add_handler(CommandHandler("addkey", add_key))
+app.add_handler(CommandHandler("delkey", delete_key))
+app.add_handler(CommandHandler("stats", stats))
+app.add_handler(CommandHandler("genkey", genkey))
+app.add_handler(CommandHandler("addaccess", addaccess))
+app.add_handler(CommandHandler("testbroadcast", testbroadcast))   # FIXED
+app.add_handler(CommandHandler("broadcast", broadcast))           # NEW
 
-    # file management
-    app.add_handler(CommandHandler("addfile", addfile))
-    app.add_handler(CommandHandler("listfiles", listfiles))
-    app.add_handler(CommandHandler("deletefile", deletefile))
-    app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
+# file management
+app.add_handler(CommandHandler("addfile", addfile))
+app.add_handler(CommandHandler("listfiles", listfiles))
+app.add_handler(CommandHandler("deletefile", deletefile))
+app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
 
     # admin tracking
     app.add_handler(ChatMemberHandler(track_bot_status, ChatMemberHandler.MY_CHAT_MEMBER))
