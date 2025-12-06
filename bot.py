@@ -18,17 +18,16 @@ ASK_PASS = 1
 WAITING_FILE = {}
 
 # ----------- STORAGE (groups auto-broadcast) -------------
+import json
 GROUPS_FILE = "groups.json"
 
 def load_groups():
     try:
-        import json
         return json.load(open(GROUPS_FILE, "r"))
     except:
         return []
 
 def save_groups(groups):
-    import json
     json.dump(groups, open(GROUPS_FILE, "w"), indent=4)
 
 groups_list = load_groups()
@@ -163,7 +162,7 @@ async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(txt)
 
-# ---------------- EXTEND KEY ----------------
+# ---------------- EXTEND ----------------
 def parse_days(value):
     v = value.lower()
     if v.endswith("d"):
@@ -192,7 +191,37 @@ async def extend(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"❌ {res.get('error')}")
 
-# ---------------- GEN KEY ----------------
+# ---------------- STATS (MISSING FIXED HERE) ----------------
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    r = requests.get(API_URL + "/api/bot/stats")
+    res = safe_json(r)
+
+    if not isinstance(res, list):
+        return await update.message.reply_text("❌ Server error")
+
+    now = datetime.now()
+    total = len(res)
+    active = 0
+    expired = 0
+
+    for k in res:
+        try:
+            exp = datetime.strptime(k["expires"], "%Y-%m-%d")
+        except:
+            exp = datetime.strptime(k["expires"], "%Y-%m-%d %H:%M:%S")
+        if exp < now:
+            expired += 1
+        else:
+            active += 1
+
+    await update.message.reply_text(
+        f"📊 Stats\n\nTotal: {total}\nActive: {active}\nExpired: {expired}"
+    )
+
+# ---------------- GENKEY ----------------
 def random_suffix(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
@@ -232,7 +261,7 @@ async def genkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     out = "\n".join(keys)
     await update.message.reply_text(f"Generated:\n{out}")
 
-# ------------------- ADD ACCESS -------------------
+# ---------------- ADD ACCESS ----------------
 async def addaccess(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -257,16 +286,14 @@ async def addaccess(update: Update, context):
     else:
         await update.message.reply_text(f"❌ {res.get('error')}")
 
-
-# ------------------- WAIT FOR FILE -------------------
+# ---------------- WAIT FOR FILE ----------------
 async def addfile(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
     WAITING_FILE[update.message.from_user.id] = True
     await update.message.reply_text("📤 Send `.txt` file now.")
 
-
-# ------------------- FILE RECEIVED -------------------
+# ---------------- FILE RECEIVER ----------------
 async def file_receiver(update: Update, context):
     uid = update.message.from_user.id
     
@@ -282,7 +309,6 @@ async def file_receiver(update: Update, context):
     file_obj = await doc.get_file()
     file_bytes = await file_obj.download_as_bytearray()
 
-    # upload to server.py API
     r = requests.post(
         API_URL + "/api/bot/upload",
         files={"file": (doc.file_name, file_bytes)},
@@ -293,13 +319,11 @@ async def file_receiver(update: Update, context):
     if not res.get("success"):
         return await update.message.reply_text(f"❌ {res.get('error')}")
 
-    # get file info
     text = file_bytes.decode("utf-8", errors="ignore")
     lines = len([l for l in text.splitlines() if l.strip()])
     size_kb = round(len(file_bytes) / 1024, 2)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # broadcast message
     broadcast_msg = (
         "📢 **New Data Added!**\n"
         "🚀 Fresh logs are now live!\n"
@@ -317,8 +341,7 @@ async def file_receiver(update: Update, context):
     await update.message.reply_text(f"✅ Uploaded `{doc.file_name}`!")
     await broadcast(broadcast_msg, context.application)
 
-
-# ------------------- LIST FILES -------------------
+# ---------------- LIST FILES ----------------
 async def listfiles(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -335,8 +358,7 @@ async def listfiles(update: Update, context):
 
     await update.message.reply_text(out)
 
-
-# ------------------- DELETE FILE -------------------
+# ---------------- DELETE FILE ----------------
 async def deletefile(update: Update, context):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
@@ -357,8 +379,7 @@ async def deletefile(update: Update, context):
     else:
         await update.message.reply_text(f"❌ {res.get('error')}")
 
-
-# ------------------- START MSG -------------------
+# ---------------- START MSG ----------------
 async def start(update: Update, context):
     await update.message.reply_text(
         "👋 **Welcome to Yato Panel Bot**\n\n"
@@ -378,12 +399,10 @@ async def start(update: Update, context):
         "• `/listfiles`"
     )
 
-
-# ------------------- MAIN -------------------
+# ---------------- MAIN ----------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Conversation for admin login
     admin_conv = ConversationHandler(
         entry_points=[CommandHandler("admin", admin_panel)],
         states={ASK_PASS: [MessageHandler(filters.TEXT, admin_password)]},
@@ -391,22 +410,19 @@ def main():
     )
     app.add_handler(admin_conv)
 
-    # group listener
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_group))
     app.add_handler(MessageHandler(filters.ALL & filters.Regex(".*"), handle_group))
 
-    # Basic commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("check", check_key))
     app.add_handler(CommandHandler("checkinfo", check_info))
     app.add_handler(CommandHandler("extend", extend))
     app.add_handler(CommandHandler("addkey", add_key))
     app.add_handler(CommandHandler("delkey", delete_key))
-    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("stats", stats))   # FIXED
     app.add_handler(CommandHandler("genkey", genkey))
     app.add_handler(CommandHandler("addaccess", addaccess))
 
-    # File system
     app.add_handler(CommandHandler("addfile", addfile))
     app.add_handler(CommandHandler("listfiles", listfiles))
     app.add_handler(CommandHandler("deletefile", deletefile))
@@ -414,7 +430,6 @@ def main():
 
     print("🤖 Bot Running…")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
