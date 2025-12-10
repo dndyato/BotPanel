@@ -473,10 +473,9 @@ async def listfiles(update: Update, context):
 
     txt = "📁 **Stored Files:**\n\n"
     for f in res["files"]:
-        txt += f"• `{f['name']}` — {f['size_kb']} KB — {f['lines']} lines\n")
+        txt += f"• `{f['name']}` — {f['size_kb']} KB — {f['lines']} lines\n"  # <-- fixed
 
     await update.message.reply_text(txt, parse_mode="Markdown")
-
 
 # ---------------------------------------------------
 # DELETE FILE
