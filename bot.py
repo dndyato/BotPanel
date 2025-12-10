@@ -15,6 +15,8 @@ ADMIN_PASSWORD = "yato123"
 ADMIN_LOGGED_IN = set()
 ASK_PASS = 1
 WAITING_FILE = {}
+WAITING_BROADCAST = {}  # <-- ADDED
+
 
 # ---------------------------------------------------
 # BROADCAST ADMIN GROUPS TRACKER
@@ -49,6 +51,89 @@ async def admin_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def check_admin(uid):
     return uid in ADMIN_LOGGED_IN
+
+
+# ---------------------------------------------------
+# USER DOMAIN REQUEST SYSTEM
+# ---------------------------------------------------
+import json, os
+
+REQUEST_FILE = "domain_requests.json"
+
+if not os.path.exists(REQUEST_FILE):
+    with open(REQUEST_FILE, "w") as f:
+        json.dump({"requests": []}, f, indent=4)
+
+def save_request(user_id, username, domain):
+    with open(REQUEST_FILE, "r") as f:
+        data = json.load(f)
+
+    data["requests"].append({
+        "user_id": user_id,
+        "username": username,
+        "domain": domain,
+        "time": str(datetime.now())
+    })
+
+    with open(REQUEST_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+async def request_domain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 1:
+        return await update.message.reply_text(
+            "📩 *Usage:*\n`/requests domain.com`",
+            parse_mode="Markdown"
+        )
+
+    domain = " ".join(context.args)
+    user = update.message.from_user
+
+    save_request(user.id, user.username, domain)
+
+    BOT_ADMIN_CHAT = 7675369659
+
+    text = (
+        "📥 *NEW DOMAIN REQUEST*\n\n"
+        f"👤 User: `{user.id}`\n"
+        f"🧑 Username: @{user.username}\n"
+        f"🌐 Domain: `{domain}`\n"
+        f"🕒 Time: `{datetime.now()}`"
+    )
+
+    try:
+        await context.bot.send_message(chat_id=BOT_ADMIN_CHAT, text=text, parse_mode="Markdown")
+    except:
+        pass
+
+    await update.message.reply_text(
+        "✅ Your domain request has been sent!",
+        parse_mode="Markdown"
+    )
+
+
+async def all_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    with open(REQUEST_FILE, "r") as f:
+        data = json.load(f).get("requests", [])
+
+    if not data:
+        return await update.message.reply_text("📭 No requests found.")
+
+    msg = "📚 *ALL DOMAIN REQUESTS:*\n\n"
+
+    for r in data[-50:]:
+        msg += (
+            f"👤 `{r['user_id']}` | @{r['username']}\n"
+            f"🌐 `{r['domain']}`\n"
+            f"🕒 {r['time']}\n"
+            "━━━━━━━━━━━━━━\n"
+        )
+
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
 
 
 # ---------------------------------------------------
@@ -149,7 +234,10 @@ async def check_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     res = safe_json(r)
 
     if not res.get("success"):
-        return await update.message.reply_text(f"❌ Error: `{res.get('error')}`", parse_mode="Markdown")
+        return await update.message.reply_text(
+            f"❌ Error: `{res.get('error')}`",
+            parse_mode="Markdown"
+        )
 
     await update.message.reply_text(
         "🔍 **Key Information**\n\n"
@@ -451,6 +539,68 @@ async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------
+# MULTILINE BROADCAST RECEIVER (ADDED)
+# ---------------------------------------------------
+async def broadcast_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.message.from_user.id
+
+    if uid not in WAITING_BROADCAST:
+        return
+
+    del WAITING_BROADCAST[uid]
+
+    msg = update.message.text
+
+    if not ADMIN_GROUPS:
+        return await update.message.reply_text("⚠️ No admin groups detected!")
+
+    sent = 0
+    for gid in list(ADMIN_GROUPS):
+        try:
+            await context.bot.send_message(chat_id=gid, text=msg)
+            sent += 1
+        except:
+            pass
+
+    await update.message.reply_text(f"📢 Multiline broadcast sent to **{sent}** groups.")
+
+
+# ---------------------------------------------------
+# BROADCAST CUSTOM MESSAGE (MULTILINE)
+# ---------------------------------------------------
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    # Using multiline mode
+    if not context.args:
+        WAITING_BROADCAST[update.message.from_user.id] = True
+        return await update.message.reply_text(
+            "📝 *Send the full broadcast message now.*\n"
+            "All line breaks will be preserved.",
+            parse_mode="Markdown"
+        )
+
+    # Single-line mode
+    msg = " ".join(context.args)
+
+    if not ADMIN_GROUPS:
+        return await update.message.reply_text("⚠️ No admin groups detected!")
+
+    sent = 0
+    for gid in list(ADMIN_GROUPS):
+        try:
+            await context.bot.send_message(chat_id=gid, text=msg)
+            sent += 1
+        except:
+            pass
+
+    await update.message.reply_text(f"📢 Broadcast sent to **{sent}** groups.")
+
+
+
+
+# ---------------------------------------------------
 # TEST BROADCAST
 # ---------------------------------------------------
 async def testbroadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -492,100 +642,9 @@ async def track_bot_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             ADMIN_GROUPS.discard(chat.id)
 
-# ---------------------------------------------------
-# BROADCAST CUSTOM MESSAGE
-# ---------------------------------------------------
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_admin(update.message.from_user.id):
-        return await update.message.reply_text("❌ Admin only.")
 
-    if not context.args:
-        return await update.message.reply_text(
-            "Usage:\n`/broadcast your message here`",
-            parse_mode="Markdown"
-        )
-
-    msg = " ".join(context.args)
-
-    if not ADMIN_GROUPS:
-        return await update.message.reply_text("⚠️ No admin groups detected!")
-
-    sent = 0
-    for gid in list(ADMIN_GROUPS):
-        try:
-            await context.bot.send_message(chat_id=gid, text=msg, parse_mode="Markdown")
-            sent += 1
-        except:
-            pass
-
-    await update.message.reply_text(f"📢 Broadcast sent to **{sent}** groups.")
 
 # ---------------------------------------------------
 # START MESSAGE
 # ---------------------------------------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 **Welcome to Yato Panel Bot!**\n\n"
-        "**User Commands:**\n"
-        "• `/check KEY`\n"
-        "• `/checkinfo KEY`\n\n"
-        "**Admin Commands:**\n"
-        "• `/admin`\n"
-        "• `/addkey`\n"
-        "• `/delkey`\n"
-        "• `/extend`\n"
-        "• `/stats`\n"
-        "• `/genkey`\n"
-        "• `/addfile`\n"
-        "• `/listfiles`\n"
-        "• `/deletefile filename.txt`\n"
-        "• `/addaccess KEY`\n"
-        "• `/testbroadcast`",
-        parse_mode="Markdown"
-    )
-
-
-# ---------------------------------------------------
-# MAIN
-# ---------------------------------------------------
-def main():
-    TOKEN = "8316549162:AAHxOxJrQld__OeMOt42Gs9gzyjolF8qsl0"
-
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    admin_conv = ConversationHandler(
-        entry_points=[CommandHandler("admin", admin_panel)],
-        states={ASK_PASS: [MessageHandler(filters.TEXT, admin_password)]},
-        fallbacks=[]
-    )
-
-    app.add_handler(admin_conv)
-
-    # commands
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("check", check_key))
-    app.add_handler(CommandHandler("checkinfo", check_info))
-    app.add_handler(CommandHandler("extend", extend_key))
-    app.add_handler(CommandHandler("addkey", add_key))
-    app.add_handler(CommandHandler("delkey", delete_key))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("genkey", genkey))
-    app.add_handler(CommandHandler("addaccess", addaccess))
-    app.add_handler(CommandHandler("testbroadcast", testbroadcast))   # FIXED
-    app.add_handler(CommandHandler("broadcast", broadcast))           # ADDED
-
-    # file management
-    app.add_handler(CommandHandler("addfile", addfile))
-    app.add_handler(CommandHandler("listfiles", listfiles))
-    app.add_handler(CommandHandler("deletefile", deletefile))
-    app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
-
-    # admin tracking
-    app.add_handler(ChatMemberHandler(track_bot_status, ChatMemberHandler.MY_CHAT_MEMBER))
-
-    print("🤖 Bot Running…")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
-    
+async def start(update: Update, context: ContextTypes.DE
