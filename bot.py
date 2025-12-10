@@ -548,8 +548,8 @@ async def broadcast_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     del WAITING_BROADCAST[uid]
 
-    # 🔥 FIXED: preserve exact multiline text
-    msg = update.message.to_dict().get("text", "")
+    # Forward the exact message as sent
+    msg = update.message.text  # no .to_dict(), just take the text
 
     if not ADMIN_GROUPS:
         return await update.message.reply_text("⚠️ No admin groups detected!")
@@ -566,22 +566,22 @@ async def broadcast_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 # ---------------------------------------------------
-# BROADCAST CUSTOM MESSAGE (MULTILINE)
+# BROADCAST CUSTOM MESSAGE (MULTILINE) FIXED
 # ---------------------------------------------------
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Admin only.")
 
-    # Using multiline mode
+    # If no args, enable multiline mode
     if not context.args:
         WAITING_BROADCAST[update.message.from_user.id] = True
         return await update.message.reply_text(
             "📝 *Send the full broadcast message now.*\n"
-            "All line breaks will be preserved.",
+            "It will be forwarded exactly as you type.",
             parse_mode="Markdown"
         )
 
-    # Single-line mode
+    # Single-line mode, join args with spaces
     msg = " ".join(context.args)
 
     if not ADMIN_GROUPS:
@@ -596,7 +596,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     await update.message.reply_text(f"📢 Broadcast sent to **{sent}** groups.")
-
 
 # ---------------------------------------------------
 # TEST BROADCAST
