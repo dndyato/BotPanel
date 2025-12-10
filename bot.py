@@ -647,4 +647,78 @@ async def track_bot_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------
 # START MESSAGE
 # ---------------------------------------------------
-async def start(update: Update, context: ContextTypes.DE
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 **Welcome to Yato Panel Bot!**\n\n"
+        "**User Commands:**\n"
+        "• `/check KEY`\n"
+        "• `/checkinfo KEY`\n"
+        "• `/requests domain`\n\n"
+        "**Admin Commands:**\n"
+        "• `/admin`\n"
+        "• `/addkey`\n"
+        "• `/delkey`\n"
+        "• `/extend`\n"
+        "• `/stats`\n"
+        "• `/genkey`\n"
+        "• `/addfile`\n"
+        "• `/listfiles`\n"
+        "• `/deletefile filename.txt`\n"
+        "• `/addaccess KEY`\n"
+        "• `/allrequests`\n"
+        "• `/broadcast`\n"
+        "• `/testbroadcast`\n",
+        parse_mode="Markdown"
+    )
+
+
+# ---------------------------------------------------
+# MAIN
+# ---------------------------------------------------
+def main():
+    TOKEN = "8316549162:AAHxOxJrQld__OeMOt42Gs9gzyjolF8qsl0"
+
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    admin_conv = ConversationHandler(
+        entry_points=[CommandHandler("admin", admin_panel)],
+        states={ASK_PASS: [MessageHandler(filters.TEXT, admin_password)]},
+        fallbacks=[]
+    )
+
+    app.add_handler(admin_conv)
+
+    # commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("check", check_key))
+    app.add_handler(CommandHandler("checkinfo", check_info))
+    app.add_handler(CommandHandler("extend", extend_key))
+    app.add_handler(CommandHandler("addkey", add_key))
+    app.add_handler(CommandHandler("delkey", delete_key))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("genkey", genkey))
+    app.add_handler(CommandHandler("addaccess", addaccess))
+    app.add_handler(CommandHandler("testbroadcast", testbroadcast))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+
+    # REQUEST SYSTEM
+    app.add_handler(CommandHandler("requests", request_domain))
+    app.add_handler(CommandHandler("allrequests", all_requests))
+
+    # file management
+    app.add_handler(CommandHandler("addfile", addfile))
+    app.add_handler(CommandHandler("listfiles", listfiles))
+    app.add_handler(CommandHandler("deletefile", deletefile))
+    app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
+
+    # MULTILINE BROADCAST RECEIVER
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_receiver))
+
+    # admin tracking
+    app.add_handler(ChatMemberHandler(track_bot_status, ChatMemberHandler.MY_CHAT_MEMBER))
+
+    print("🤖 Bot Running…")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
