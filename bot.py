@@ -473,7 +473,7 @@ async def listfiles(update: Update, context):
 
     txt = "📁 **Stored Files:**\n\n"
     for f in res["files"]:
-        txt += f"• `{f['name']}` — {f['size_kb']} KB — {f['lines']} lines\n"
+        txt += f"• `{f['name']}` — {f['size_kb']} KB — {f['lines']} lines\n")
 
     await update.message.reply_text(txt, parse_mode="Markdown")
 
@@ -539,7 +539,7 @@ async def addaccess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------
-# MULTILINE BROADCAST RECEIVER (ADDED)
+# MULTILINE BROADCAST RECEIVER (FIXED)
 # ---------------------------------------------------
 async def broadcast_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.message.from_user.id
@@ -549,7 +549,8 @@ async def broadcast_receiver(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     del WAITING_BROADCAST[uid]
 
-    msg = update.message.text
+    # 🔥 FIXED: preserve exact multiline text
+    msg = update.message.to_dict().get("text", "")
 
     if not ADMIN_GROUPS:
         return await update.message.reply_text("⚠️ No admin groups detected!")
@@ -596,8 +597,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     await update.message.reply_text(f"📢 Broadcast sent to **{sent}** groups.")
-
-
 
 
 # ---------------------------------------------------
@@ -676,7 +675,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ---------------------------------------------------
 def main():
-    TOKEN = "8316549162:AAHCYJichKSGTmrUGgP88xpgwhhsV8LzNUU"
+    TOKEN = "8316549162:AAEVWxpfYlRNY6VlXNky54jQqGCm51OsLcQ"
 
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -719,6 +718,7 @@ def main():
 
     print("🤖 Bot Running…")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
