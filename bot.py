@@ -625,6 +625,99 @@ async def testbroadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"✅ Test broadcast sent to **{count}** groups.")
 
+async def deny_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    if len(context.args) < 2:
+        return await update.message.reply_text(
+            "Usage: /denyrequest <number> <reason>"
+        )
+
+    try:
+        index = int(context.args[0]) - 1
+    except:
+        return await update.message.reply_text("❌ Invalid request number.")
+
+    reason = " ".join(context.args[1:])
+
+    with open(REQUEST_FILE, "r") as f:
+        data = json.load(f)
+
+    requests_list = data.get("requests", [])
+
+    if index < 0 or index >= len(requests_list):
+        return await update.message.reply_text("❌ Request not found.")
+
+    req = requests_list.pop(index)
+
+    with open(REQUEST_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+    # notify user
+    try:
+        await context.bot.send_message(
+            chat_id=req["user_id"],
+            text=(
+                "❌ **DOMAIN REQUEST DENIED**\n\n"
+                f"🌐 Domain: `{req['domain']}`\n"
+                f"📄 Reason: *{reason}*"
+            ),
+            parse_mode="Markdown"
+        )
+    except:
+        pass
+
+    await update.message.reply_text(
+        f"🚫 Denied request:\n`{req['domain']}`\nReason: {reason}",
+        parse_mode="Markdown"
+    )
+    
+async def approve_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    if len(context.args) < 1:
+        return await update.message.reply_text(
+            "Usage: /approverequest <number>"
+        )
+
+    try:
+        index = int(context.args[0]) - 1
+    except:
+        return await update.message.reply_text("❌ Invalid request number.")
+
+    with open(REQUEST_FILE, "r") as f:
+        data = json.load(f)
+
+    requests_list = data.get("requests", [])
+
+    if index < 0 or index >= len(requests_list):
+        return await update.message.reply_text("❌ Request not found.")
+
+    req = requests_list.pop(index)
+
+    with open(REQUEST_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+    # notify user
+    try:
+        await context.bot.send_message(
+            chat_id=req["user_id"],
+            text=(
+                "✅ **DOMAIN APPROVED!**\n\n"
+                f"🌐 Domain: `{req['domain']}`\n"
+                "🎉 Your request has been approved!"
+            ),
+            parse_mode="Markdown"
+        )
+    except:
+        pass
+
+    await update.message.reply_text(
+        f"✅ Approved request:\n`{req['domain']}`",
+        parse_mode="Markdown"
+    )
 
 # ---------------------------------------------------
 # TRACK BOT STATUS (ADMIN ONLY)
@@ -664,7 +757,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/addaccess KEY`\n"
         "• `/allrequests`\n"
         "• `/broadcast`\n"
-        "• `/testbroadcast`\n",
+        "• `/testbroadcast`\n"
+        "• `/approverequest`\n"
+        "• `/denyrequest`\n",
         parse_mode="Markdown"
     )
 
@@ -673,7 +768,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ---------------------------------------------------
 def main():
-    TOKEN = "8316549162:AAEVWxpfYlRNY6VlXNky54jQqGCm51OsLcQ"
+    TOKEN = "8316549162:AAG1kQF1Vfb3yvfbxB70hL3NWjt2og8oDCg"
 
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -701,6 +796,8 @@ def main():
     # REQUEST SYSTEM
     app.add_handler(CommandHandler("requests", request_domain))
     app.add_handler(CommandHandler("allrequests", all_requests))
+    app.add_handler(CommandHandler("approverequest", approve_request))
+    app.add_handler(CommandHandler("denyrequest", deny_request))
 
     # file management
     app.add_handler(CommandHandler("addfile", addfile))
