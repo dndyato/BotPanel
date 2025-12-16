@@ -1,3 +1,5 @@
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackQueryHandler
 import requests
 import random
 import string
@@ -732,7 +734,67 @@ async def track_bot_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             ADMIN_GROUPS.discard(chat.id)
 
+async def download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
+    if not check_admin(query.from_user.id):
+        return await query.message.reply_text("❌ Admin only.")
+
+    if not query.data.startswith("DL|"):
+        return
+
+    filename = query.data.split("|", 1)[1]
+
+    url = (
+        f"{API_URL}/api/bot/download"
+        f"?password={ADMIN_PASSWORD}&filename={filename}"
+    )
+
+    try:
+        r = requests.get(url, stream=True)
+    except:
+        return await query.message.reply_text("❌ Server unreachable.")
+
+    if r.status_code != 200:
+        return await query.message.reply_text("❌ File not found or denied.")
+
+    tmp = f"/tmp/{filename}"
+    with open(tmp, "wb") as f:
+        for chunk in r.iter_content(8192):
+            f.write(chunk)
+
+    await query.message.reply_document(
+        document=open(tmp, "rb"),
+        filename=filename,
+        caption=f"📥 **Downloaded from database**\n`{filename}`",
+        parse_mode="Markdown"
+    )
+
+async def download_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_admin(update.message.from_user.id):
+        return await update.message.reply_text("❌ Admin only.")
+
+    r = requests.get(API_URL + "/api/bot/listfiles")
+    res = safe_json(r)
+
+    if not res.get("success") or not res.get("files"):
+        return await update.message.reply_text("📭 No files available.")
+
+    keyboard = []
+    for f in res["files"]:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📄 {f['name']} ({f['lines']} lines)",
+                callback_data=f"DL|{f['name']}"
+            )
+        ])
+
+    await update.message.reply_text(
+        "📂 **Select a file to download:**",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 # ---------------------------------------------------
 # START MESSAGE
@@ -804,6 +866,8 @@ def main():
     app.add_handler(CommandHandler("listfiles", listfiles))
     app.add_handler(CommandHandler("deletefile", deletefile))
     app.add_handler(MessageHandler(filters.Document.ALL, file_receiver))
+    app.add_handler(CommandHandler("download", download_picker))
+    app.add_handler(CallbackQueryHandler(download_callback))
 
     # MULTILINE BROADCAST RECEIVER
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_receiver))
