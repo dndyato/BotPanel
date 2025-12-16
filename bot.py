@@ -815,6 +815,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/genkey`\n"
         "• `/addfile`\n"
         "• `/listfiles`\n"
+        "• `/download`\n"
         "• `/deletefile filename.txt`\n"
         "• `/addaccess KEY`\n"
         "• `/allrequests`\n"
@@ -830,7 +831,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN
 # ---------------------------------------------------
 def main():
-    TOKEN = "8316549162:AAG1kQF1Vfb3yvfbxB70hL3NWjt2og8oDCg"
+    TOKEN = "8316549162:AAF7v5QYd0RgdbHPu554A6Cd-0VIWYhRXuQ"
 
     app = ApplicationBuilder().token(TOKEN).build()
 
